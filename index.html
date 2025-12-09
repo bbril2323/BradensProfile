@@ -1,119 +1,573 @@
-<!DOCTYPE html>
-<html lang="en">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1.0">
-  <title>Braden Briller - Personal Profile</title>
-  <style>
-    body {
-      margin: 0;
-      font-family: Arial, sans-serif;
-      background-color: black;
-      color: white;
-      text-align: center;
+import React, { useReducer, createContext, useContext, useEffect, useState } from 'react';
+import { BrowserRouter as Router, Routes, Route, Link, useNavigate } from 'react-router-dom';
+import { ShoppingCart, Menu } from 'lucide-react';
+
+// NOTE: This single-file React app expects Tailwind CSS to be set up in the host project.
+// Dependencies: react-router-dom, lucide-react, recharts (optional), and shadcn/ui components if desired.
+// To run: create a Vite or CRA project, install dependencies, enable Tailwind, then paste this file as App.jsx.
+
+/* -------------------------
+   Sample product data
+   ------------------------- */
+const SAMPLE_PRODUCTS = [
+  {
+    id: 'slide-1',
+    name: 'CloudWalk Slide',
+    price: 39.0,
+    description: 'Featherlight EVA footbed, contoured arch support, anti-slip outsole.',
+    images: [
+      'https://images.unsplash.com/photo-1542291026-7eec264c27ff?auto=format&fit=crop&w=1200&q=60',
+    ],
+    category: 'casual',
+    featured: true,
+    rating: 4.6,
+  },
+  {
+    id: 'slide-2',
+    name: 'AquaGrip Pool Slide',
+    price: 29.0,
+    description: 'Water-ready, quick-dry materials and deep grooved sole for traction.',
+    images: [
+      'https://images.unsplash.com/photo-1528701800483-2af3402e1b2b?auto=format&fit=crop&w=1200&q=60',
+    ],
+    category: 'sport',
+    featured: true,
+    rating: 4.3,
+  },
+  {
+    id: 'slide-3',
+    name: 'LuxeFoam Memory Slide',
+    price: 59.0,
+    description: 'Memory-foam cushion with vegan leather upper for elevated comfort.',
+    images: [
+      'https://images.unsplash.com/photo-1551425183-9dec1eafed05?auto=format&fit=crop&w=1200&q=60',
+    ],
+    category: 'premium',
+    featured: false,
+    rating: 4.8,
+  },
+  {
+    id: 'slide-4',
+    name: 'StreetStep Slide',
+    price: 34.0,
+    description: 'Durable rubber outsole built for sidewalk-to-street use.',
+    images: [
+      'https://images.unsplash.com/photo-1600180758890-5f9ff0d3a0a9?auto=format&fit=crop&w=1200&q=60',
+    ],
+    category: 'casual',
+    featured: true,
+    rating: 4.2,
+  },
+];
+
+/* -------------------------
+   Cart State Management
+   ------------------------- */
+const CartContext = createContext();
+
+function cartReducer(state, action) {
+  switch (action.type) {
+    case 'INIT':
+      return action.payload || [];
+    case 'ADD': {
+      const found = state.find((i) => i.id === action.payload.id);
+      if (found) {
+        return state.map((i) => (i.id === action.payload.id ? { ...i, qty: i.qty + action.payload.qty } : i));
+      }
+      return [...state, { ...action.payload }];
     }
+    case 'REMOVE':
+      return state.filter((i) => i.id !== action.payload);
+    case 'UPDATE_QTY':
+      return state.map((i) => (i.id === action.payload.id ? { ...i, qty: action.payload.qty } : i));
+    case 'CLEAR':
+      return [];
+    default:
+      return state;
+  }
+}
 
-    header {
-      position: absolute;
-      top: 10px;
-      left: 20px;
-      font-size: 20px;
-      font-weight: bold;
-    }
+function useCart() {
+  return useContext(CartContext);
+}
 
-    h1 {
-      margin-top: 80px;
-      font-size: 40px;
-    }
+/* -------------------------
+   Small UI pieces
+   ------------------------- */
+function Header() {
+  const { cart } = useCart();
+  const totalQty = cart.reduce((s, i) => s + i.qty, 0);
+  return (
+    <header className="bg-white shadow sticky top-0 z-40">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8">
+        <div className="flex items-center justify-between h-16">
+          <Link to="/" className="flex items-center gap-3">
+            <div className="bg-gradient-to-br from-indigo-500 to-pink-500 text-white rounded-md p-2 shadow">
+              <svg width="26" height="26" viewBox="0 0 24 24" fill="none" xmlns="http://www.w3.org/2000/svg"><path d="M2 12c0 5.523 4.477 10 10 10s10-4.477 10-10S17.523 2 12 2 2 6.477 2 12z" fill="white"/></svg>
+            </div>
+            <div>
+              <h1 className="text-lg font-bold">SlideCo</h1>
+              <p className="text-xs text-gray-500 -mt-1">Slides engineered for every step</p>
+            </div>
+          </Link>
 
-    img {
-      margin-top: 30px;
-      width: 250px;
-      height: 250px;
-      border-radius: 50%;
-      object-fit: cover;
-      border: 4px solid white;
-    }
+          <nav className="hidden md:flex items-center gap-6">
+            <Link to="/shop" className="text-gray-700 hover:text-indigo-600">Shop</Link>
+            <Link to="/deals" className="text-gray-700 hover:text-indigo-600">Featured Deals</Link>
+            <Link to="/about" className="text-gray-700 hover:text-indigo-600">About</Link>
+            <Link to="/support" className="text-gray-700 hover:text-indigo-600">Support</Link>
+          </nav>
 
-    .links {
-      margin-top: 40px;
-    }
+          <div className="flex items-center gap-4">
+            <Link to="/cart" className="relative inline-flex items-center gap-2 text-gray-700 hover:text-indigo-600">
+              <ShoppingCart size={18} />
+              <span className="hidden sm:inline">Cart</span>
+              {totalQty > 0 && (
+                <span className="absolute -top-2 -right-2 bg-red-600 text-white rounded-full text-xs w-5 h-5 flex items-center justify-center">{totalQty}</span>
+              )}
+            </Link>
+            <button className="md:hidden p-2 rounded-md bg-gray-100">
+              <Menu size={18} />
+            </button>
+          </div>
+        </div>
+      </div>
+    </header>
+  );
+}
 
-    .links a {
-      color: #1e90ff;
-      font-size: 20px;
-      text-decoration: none;
-      border: 1px solid #1e90ff;
-      padding: 10px 15px;
-      border-radius: 8px;
-      transition: 0.3s;
-    }
+function Footer() {
+  return (
+    <footer className="bg-gray-50 mt-12">
+      <div className="max-w-7xl mx-auto px-6 lg:px-8 py-12 flex flex-col md:flex-row justify-between gap-6">
+        <div>
+          <h3 className="font-semibold">SlideCo</h3>
+          <p className="text-sm text-gray-600 mt-2">Comfort-first slides for city, pool, and travel. Free returns in 30 days.</p>
+        </div>
+        <div className="grid grid-cols-2 gap-6">
+          <div>
+            <h4 className="font-medium">Shop</h4>
+            <ul className="text-sm text-gray-600 mt-2 space-y-2">
+              <li><Link to="/shop">All Slides</Link></li>
+              <li><Link to="/deals">Featured Deals</Link></li>
+            </ul>
+          </div>
+          <div>
+            <h4 className="font-medium">Support</h4>
+            <ul className="text-sm text-gray-600 mt-2 space-y-2">
+              <li><Link to="/support">Contact</Link></li>
+              <li><Link to="/about">About Us</Link></li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </footer>
+  );
+}
 
-    .links a:hover {
-      background-color: #1e90ff;
-      color: black;
-    }
+/* -------------------------
+   Pages
+   ------------------------- */
+function Home() {
+  const featured = SAMPLE_PRODUCTS.filter((p) => p.featured);
+  return (
+    <main className="max-w-7xl mx-auto px-6 lg:px-8 py-12">
+      <section className="grid md:grid-cols-2 gap-10 items-center">
+        <div>
+          <h2 className="text-4xl font-extrabold leading-tight">Slides that feel like walking on air.</h2>
+          <p className="text-lg text-gray-600 mt-4">Engineered footbeds, breathable materials, and bold designs — ready for poolside, city streets, and everything in between.</p>
+          <div className="mt-6 flex gap-4">
+            <Link to="/shop" className="inline-block px-6 py-3 bg-indigo-600 text-white rounded-md shadow hover:bg-indigo-700">Shop Slides</Link>
+            <Link to="/deals" className="inline-block px-6 py-3 border border-gray-200 rounded-md">Featured Deals</Link>
+          </div>
 
-    /* game styles */
-    .game {
-      margin-top: 50px;
-    }
-    #box {
-      width: 50px;
-      height: 50px;
-      background: red;
-      position: absolute;
-      top: 200px;
-      left: 50%;
-      transform: translateX(-50%);
-      cursor: pointer;
-    }
-  </style>
-</head>
-<body>
+          <div className="mt-8 grid grid-cols-3 gap-3">
+            {featured.map((p) => (
+              <div key={p.id} className="bg-white rounded-lg overflow-hidden shadow">
+                <img src={p.images[0]} alt={p.name} className="w-full h-24 object-cover" />
+                <div className="p-3">
+                  <h5 className="text-sm font-medium">{p.name}</h5>
+                  <p className="text-xs text-gray-500">${p.price.toFixed(2)}</p>
+                </div>
+              </div>
+            ))}
+          </div>
+        </div>
 
-  <header>
-    Braden Briller
-  </header>
+        <div className="rounded-lg overflow-hidden shadow-lg">
+          <img src="https://images.unsplash.com/photo-1592928305427-57be3d9ea8d9?auto=format&fit=crop&w=1200&q=60" alt="hero" className="w-full h-96 object-cover" />
+        </div>
+      </section>
 
-  <h1>Personal Profile</h1>
+      <section className="mt-12">
+        <h3 className="text-2xl font-semibold">Why SlideCo?</h3>
+        <div className="mt-6 grid md:grid-cols-3 gap-6">
+          <Feature title="All-day comfort" text="Contoured footbeds and shock-absorbing midsoles." />
+          <Feature title="Sustainable materials" text="Recycled foams and water-saving manufacturing." />
+          <Feature title="Built to last" text="Durable outsoles and warranty on defects." />
+        </div>
+      </section>
+    </main>
+  );
+}
 
-  <!-- Your Yankees photo -->
-  <img src="hits-two-run-home-run-110048036.webp" alt="Profile Photo">
+function Feature({ title, text }) {
+  return (
+    <div className="bg-white rounded-lg p-6 shadow-sm">
+      <h4 className="font-semibold">{title}</h4>
+      <p className="text-sm text-gray-600 mt-2">{text}</p>
+    </div>
+  );
+}
 
-  <div class="links">
-    <a href="https://www.espn.com" target="_blank">Check Sports Scores</a>
-  </div>
+function Shop() {
+  const [query, setQuery] = useState('');
+  const [category, setCategory] = useState('all');
+  const [sort, setSort] = useState('featured');
+  const [products] = useState(SAMPLE_PRODUCTS);
 
-  <!-- Game Section -->
-  <div class="game">
-    <h2>Mini Game</h2>
-    <p>Click the red box as fast as you can!</p>
-    <p>Score: <span id="score">0</span></p>
-    <div id="box"></div>
-  </div>
+  const filtered = products
+    .filter((p) => (category === 'all' ? true : p.category === category))
+    .filter((p) => p.name.toLowerCase().includes(query.toLowerCase()) || p.description.toLowerCase().includes(query.toLowerCase()));
 
-  <script>
-    let score = 0;
-    const box = document.getElementById("box");
-    const scoreDisplay = document.getElementById("score");
+  const sorted = filtered.sort((a, b) => {
+    if (sort === 'price-asc') return a.price - b.price;
+    if (sort === 'price-desc') return b.price - a.price;
+    if (sort === 'rating') return b.rating - a.rating;
+    return a.featured === b.featured ? 0 : a.featured ? -1 : 1;
+  });
 
-    function moveBox() {
-      const x = Math.random() * (window.innerWidth - 60);
-      const y = Math.random() * (window.innerHeight - 60);
-      box.style.left = x + "px";
-      box.style.top = y + "px";
-    }
+  return (
+    <main className="max-w-7xl mx-auto px-6 lg:px-8 py-12">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-semibold">Shop Slides</h2>
+        <div className="flex gap-3 items-center">
+          <input value={query} onChange={(e) => setQuery(e.target.value)} placeholder="Search slides" className="px-3 py-2 border rounded-md" />
+          <select value={category} onChange={(e) => setCategory(e.target.value)} className="px-3 py-2 border rounded-md">
+            <option value="all">All</option>
+            <option value="casual">Casual</option>
+            <option value="sport">Sport</option>
+            <option value="premium">Premium</option>
+          </select>
+          <select value={sort} onChange={(e) => setSort(e.target.value)} className="px-3 py-2 border rounded-md">
+            <option value="featured">Featured</option>
+            <option value="price-asc">Price: Low to High</option>
+            <option value="price-desc">Price: High to Low</option>
+            <option value="rating">Top Rated</option>
+          </select>
+        </div>
+      </div>
 
-    box.addEventListener("click", () => {
-      score++;
-      scoreDisplay.textContent = score;
-      moveBox();
-    });
+      <div className="mt-8 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {sorted.map((p) => (
+          <ProductCard key={p.id} product={p} />
+        ))}
+      </div>
+    </main>
+  );
+}
 
-    // Start the game
-    moveBox();
-  </script>
+function ProductCard({ product }) {
+  const { dispatch } = useCart();
+  const navigate = useNavigate();
+  return (
+    <div className="bg-white rounded-lg shadow overflow-hidden flex flex-col">
+      <img src={product.images[0]} alt={product.name} className="w-full h-56 object-cover" />
+      <div className="p-4 flex-1 flex flex-col">
+        <div>
+          <h3 className="font-medium text-lg">{product.name}</h3>
+          <p className="text-sm text-gray-500 mt-1">{product.description}</p>
+        </div>
+        <div className="mt-4 flex items-center justify-between">
+          <div>
+            <span className="text-lg font-semibold">${product.price.toFixed(2)}</span>
+            <div className="text-xs text-gray-500">{product.rating} ★</div>
+          </div>
+          <div className="flex gap-2">
+            <button onClick={() => dispatch({ type: 'ADD', payload: { id: product.id, name: product.name, price: product.price, qty: 1 } })} className="px-4 py-2 bg-indigo-600 text-white rounded-md">Add</button>
+            <button onClick={() => navigate(`/product/${product.id}`)} className="px-3 py-2 border rounded-md">View</button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
 
-</body>
-</html>
+function ProductPage({ productId }) {
+  const product = SAMPLE_PRODUCTS.find((p) => p.id === productId);
+  const { dispatch } = useCart();
+  if (!product) return <div className="p-8">Product not found.</div>;
+  return (
+    <main className="max-w-4xl mx-auto px-6 lg:px-8 py-12">
+      <div className="grid md:grid-cols-2 gap-8">
+        <div>
+          <img src={product.images[0]} alt={product.name} className="w-full h-96 object-cover rounded-lg shadow" />
+        </div>
+        <div>
+          <h2 className="text-3xl font-bold">{product.name}</h2>
+          <p className="text-gray-600 mt-3">{product.description}</p>
+          <div className="mt-4 text-2xl font-semibold">${product.price.toFixed(2)}</div>
+          <div className="mt-6 flex gap-3">
+            <button onClick={() => dispatch({ type: 'ADD', payload: { id: product.id, name: product.name, price: product.price, qty: 1 } })} className="px-6 py-3 bg-indigo-600 text-white rounded-md">Add to Cart</button>
+            <button className="px-6 py-3 border rounded-md">Save for later</button>
+          </div>
+
+          <div className="mt-8">
+            <h4 className="font-medium">Product Details</h4>
+            <ul className="text-sm text-gray-600 mt-2 space-y-1">
+              <li>Materials: EVA foam, synthetic upper</li>
+              <li>Care: Wipe clean</li>
+              <li>Warranty: 12 months manufacturer defect warranty</li>
+            </ul>
+          </div>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Deals() {
+  const deals = SAMPLE_PRODUCTS.filter((p) => p.featured);
+  return (
+    <main className="max-w-7xl mx-auto px-6 lg:px-8 py-12">
+      <h2 className="text-2xl font-semibold">Featured Deals</h2>
+      <p className="text-sm text-gray-600 mt-2">Limited-time promotions and bundles curated for you.</p>
+
+      <div className="mt-6 grid sm:grid-cols-2 lg:grid-cols-3 gap-6">
+        {deals.map((d) => (
+          <div key={d.id} className="bg-white rounded-lg shadow p-4 flex flex-col">
+            <img src={d.images[0]} alt={d.name} className="w-full h-48 object-cover rounded" />
+            <h3 className="mt-3 font-medium">{d.name}</h3>
+            <div className="mt-1 text-lg font-semibold">${d.price.toFixed(2)} <span className="text-sm text-gray-500 line-through ml-2">${(d.price * 1.25).toFixed(2)}</span></div>
+            <p className="text-sm text-gray-600 mt-2">Save 20% — use code <span className="font-semibold">SLIDE20</span></p>
+            <div className="mt-4">
+              <Link to="/shop" className="inline-block px-3 py-2 bg-indigo-600 text-white rounded-md">Grab Deal</Link>
+            </div>
+          </div>
+        ))}
+      </div>
+    </main>
+  );
+}
+
+function About() {
+  return (
+    <main className="max-w-5xl mx-auto px-6 lg:px-8 py-12">
+      <h2 className="text-3xl font-semibold">About SlideCo</h2>
+      <p className="mt-4 text-gray-600">Founded by footwear engineers and designers, SlideCo focuses on crafting slides that are comfortable, sustainable, and built to last. We blend modern materials with ergonomic design to create footwear you’ll actually want to reach for each day.</p>
+
+      <div className="mt-8 grid md:grid-cols-3 gap-6">
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h4 className="font-medium">Our Mission</h4>
+          <p className="text-sm text-gray-600 mt-2">Make comfort accessible and reduce waste in footwear manufacturing.</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h4 className="font-medium">Sustainability</h4>
+          <p className="text-sm text-gray-600 mt-2">We use recycled foams and partner with water-efficient factories.</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h4 className="font-medium">Giving Back</h4>
+          <p className="text-sm text-gray-600 mt-2">A portion of proceeds supports community footcare programs.</p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function Support() {
+  const [message, setMessage] = useState('');
+  const [email, setEmail] = useState('');
+  const [status, setStatus] = useState(null);
+
+  function handleSubmit(e) {
+    e.preventDefault();
+    // In real app: submit to support API. Here we simulate success.
+    setStatus('success');
+    setMessage('');
+    setEmail('');
+    setTimeout(() => setStatus(null), 3000);
+  }
+
+  return (
+    <main className="max-w-3xl mx-auto px-6 lg:px-8 py-12">
+      <h2 className="text-2xl font-semibold">Support</h2>
+      <p className="text-sm text-gray-600 mt-2">Questions about sizing, orders, or returns? Send us a message and we’ll reply within 1-2 business days.</p>
+
+      <form onSubmit={handleSubmit} className="mt-6 bg-white rounded-lg p-6 shadow">
+        <label className="block text-sm font-medium">Email</label>
+        <input value={email} onChange={(e) => setEmail(e.target.value)} required type="email" className="mt-2 w-full px-3 py-2 border rounded-md" />
+
+        <label className="block text-sm font-medium mt-4">Message</label>
+        <textarea value={message} onChange={(e) => setMessage(e.target.value)} required rows={5} className="mt-2 w-full px-3 py-2 border rounded-md" />
+
+        <div className="mt-4 flex items-center gap-4">
+          <button className="px-4 py-2 bg-indigo-600 text-white rounded-md">Send Message</button>
+          {status === 'success' && <span className="text-green-600">Message sent. We’ll be in touch!</span>}
+        </div>
+      </form>
+
+      <div className="mt-8 grid md:grid-cols-2 gap-6">
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h4 className="font-medium">Order Support</h4>
+          <p className="text-sm text-gray-600 mt-2">Order status, cancellations, and shipping questions.</p>
+        </div>
+        <div className="bg-white p-6 rounded-lg shadow">
+          <h4 className="font-medium">Returns & Warranty</h4>
+          <p className="text-sm text-gray-600 mt-2">30-day returns and a 12-month warranty for manufacturing defects.</p>
+        </div>
+      </div>
+    </main>
+  );
+}
+
+function CartPage() {
+  const { cart, dispatch } = useCart();
+  const total = cart.reduce((s, i) => s + i.qty * i.price, 0);
+  const navigate = useNavigate();
+  return (
+    <main className="max-w-4xl mx-auto px-6 lg:px-8 py-12">
+      <h2 className="text-2xl font-semibold">Your Cart</h2>
+      {cart.length === 0 ? (
+        <div className="mt-6">
+          <p>Your cart is empty.</p>
+          <div className="mt-4">
+            <Link to="/shop" className="px-4 py-2 bg-indigo-600 text-white rounded-md">Browse Slides</Link>
+          </div>
+        </div>
+      ) : (
+        <div className="mt-6 bg-white rounded-lg shadow overflow-hidden">
+          <div className="p-6">
+            {cart.map((item) => (
+              <div key={item.id} className="flex items-center gap-4 border-b py-4">
+                <div className="flex-1">
+                  <div className="font-medium">{item.name}</div>
+                  <div className="text-sm text-gray-600">${item.price.toFixed(2)}</div>
+                </div>
+                <div className="flex items-center gap-2">
+                  <input type="number" value={item.qty} min={1} onChange={(e) => dispatch({ type: 'UPDATE_QTY', payload: { id: item.id, qty: Number(e.target.value) } })} className="w-16 px-2 py-1 border rounded-md" />
+                  <button onClick={() => dispatch({ type: 'REMOVE', payload: item.id })} className="px-3 py-2 border rounded-md">Remove</button>
+                </div>
+              </div>
+            ))}
+
+            <div className="mt-6 flex items-center justify-between">
+              <div>
+                <div className="text-sm text-gray-600">Subtotal</div>
+                <div className="text-2xl font-semibold">${total.toFixed(2)}</div>
+              </div>
+              <div className="flex gap-3">
+                <button onClick={() => dispatch({ type: 'CLEAR' })} className="px-4 py-2 border rounded-md">Clear Cart</button>
+                <button onClick={() => navigate('/checkout')} className="px-4 py-2 bg-indigo-600 text-white rounded-md">Checkout</button>
+              </div>
+            </div>
+          </div>
+        </div>
+      )}
+    </main>
+  );
+}
+
+function Checkout() {
+  const { cart, dispatch } = useCart();
+  const total = cart.reduce((s, i) => s + i.qty * i.price, 0);
+  const [email, setEmail] = useState('');
+  const [address, setAddress] = useState('');
+  const [status, setStatus] = useState(null);
+
+  function handlePlaceOrder(e) {
+    e.preventDefault();
+    // In a real app: send to payment gateway and orders API.
+    setStatus('processing');
+    setTimeout(() => {
+      setStatus('success');
+      dispatch({ type: 'CLEAR' });
+    }, 1200);
+  }
+
+  if (cart.length === 0 && status !== 'success') return (
+    <main className="max-w-3xl mx-auto px-6 lg:px-8 py-12"><p>Your cart is empty.</p></main>
+  );
+
+  return (
+    <main className="max-w-3xl mx-auto px-6 lg:px-8 py-12">
+      <h2 className="text-2xl font-semibold">Checkout</h2>
+      <form onSubmit={handlePlaceOrder} className="mt-6 bg-white rounded-lg p-6 shadow">
+        <label className="block text-sm font-medium">Email</label>
+        <input value={email} onChange={(e) => setEmail(e.target.value)} required className="mt-2 w-full px-3 py-2 border rounded-md" />
+
+        <label className="block text-sm font-medium mt-4">Shipping Address</label>
+        <input value={address} onChange={(e) => setAddress(e.target.value)} required className="mt-2 w-full px-3 py-2 border rounded-md" />
+
+        <div className="mt-6 flex items-center justify-between">
+          <div>
+            <div className="text-sm text-gray-600">Total</div>
+            <div className="text-xl font-semibold">${total.toFixed(2)}</div>
+          </div>
+          <button type="submit" className="px-6 py-3 bg-indigo-600 text-white rounded-md">Place Order</button>
+        </div>
+
+        {status === 'processing' && <p className="mt-4 text-gray-600">Processing your order...</p>}
+        {status === 'success' && <p className="mt-4 text-green-600">Order placed! A confirmation email will arrive shortly.</p>}
+      </form>
+    </main>
+  );
+}
+
+/* -------------------------
+   App Shell & Router
+   ------------------------- */
+export default function App() {
+  const [cart, dispatch] = useReducer(cartReducer, []);
+
+  useEffect(() => {
+    const saved = JSON.parse(localStorage.getItem('slideco_cart') || 'null');
+    if (saved) dispatch({ type: 'INIT', payload: saved });
+  }, []);
+
+  useEffect(() => {
+    localStorage.setItem('slideco_cart', JSON.stringify(cart));
+  }, [cart]);
+
+  return (
+    <CartContext.Provider value={{ cart, dispatch }}>
+      <Router>
+        <div className="min-h-screen bg-gray-50 flex flex-col">
+          <Header />
+
+          <Routes>
+            <Route path="/" element={<Home />} />
+            <Route path="/shop" element={<Shop />} />
+            <Route path="/deals" element={<Deals />} />
+            <Route path="/about" element={<About />} />
+            <Route path="/support" element={<Support />} />
+            <Route path="/cart" element={<CartPage />} />
+            <Route path="/checkout" element={<Checkout />} />
+            <Route path="/product/:id" element={<ProductRoute />} />
+            <Route path="*" element={<NotFound />} />
+          </Routes>
+
+          <Footer />
+        </div>
+      </Router>
+    </CartContext.Provider>
+  );
+}
+
+/* -------------------------
+   Tiny routing helpers
+   ------------------------- */
+function ProductRoute() {
+  // useParams would normally be used; to keep a single-file import-light approach we parse the URL.
+  const path = window.location.pathname;
+  const id = path.split('/').pop();
+  return <ProductPage productId={id} />;
+}
+
+function NotFound() {
+  return (
+    <main className="max-w-3xl mx-auto px-6 lg:px-8 py-12">
+      <h2 className="text-2xl font-semibold">Page not found</h2>
+      <p className="mt-4">We couldn't find that page. Try heading back to the <Link to="/">homepage</Link>.</p>
+    </main>
+  );
+}
